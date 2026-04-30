@@ -459,6 +459,20 @@ class EXPORT_SCENE_OT_fbx_bundle(bpy.types.Operator, ExportHelper):
 
     def execute(self, context):
         filepath = self.filepath
+        export_dir = os.path.dirname(filepath)
+
+        objects = self._get_export_objects(context)
+
+        # When bundling textures, remap image paths to the texture folder
+        # before export so the FBX contains correct relative references
+        original_paths = {}
+        if self.export_textures:
+            tex_dir = os.path.join(export_dir, self.texture_folder_name)
+            original_paths = textures.remap_image_paths(objects, tex_dir)
+
+        # Use relative path mode when bundling so the FBX stores
+        # paths like "textures/albedo.png"
+        path_mode = "RELATIVE" if self.export_textures else self.path_mode
 
         # Build kwargs for the built-in FBX exporter
         kwargs = {
@@ -491,7 +505,7 @@ class EXPORT_SCENE_OT_fbx_bundle(bpy.types.Operator, ExportHelper):
             "bake_anim_force_startend_keying": self.bake_anim_force_startend_keying,
             "bake_anim_step": self.bake_anim_step,
             "bake_anim_simplify_factor": self.bake_anim_simplify_factor,
-            "path_mode": self.path_mode,
+            "path_mode": path_mode,
             "embed_textures": self.embed_textures,
             "batch_mode": self.batch_mode,
             "use_batch_own_dir": self.use_batch_own_dir,
@@ -500,17 +514,19 @@ class EXPORT_SCENE_OT_fbx_bundle(bpy.types.Operator, ExportHelper):
         # Run the built-in FBX export
         result = bpy.ops.export_scene.fbx(**kwargs)
 
+        # Restore original image paths regardless of export result
+        if original_paths:
+            textures.restore_image_paths(original_paths)
+
         if "FINISHED" not in result:
             self.report({"ERROR"}, "FBX export failed")
             return {"CANCELLED"}
 
         self.report({"INFO"}, f"FBX exported: {filepath}")
 
-        # Copy textures if enabled
+        # Copy textures to the companion folder
         if self.export_textures:
-            export_dir = os.path.dirname(filepath)
             tex_dir = os.path.join(export_dir, self.texture_folder_name)
-            objects = self._get_export_objects(context)
             copied = textures.collect_and_copy_textures(objects, tex_dir)
             if copied > 0:
                 self.report({"INFO"}, f"Copied {copied} texture(s) to: {tex_dir}")

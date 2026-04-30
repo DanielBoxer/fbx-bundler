@@ -4,6 +4,42 @@ import shutil
 import bpy
 
 
+def remap_image_paths(objects, tex_dir):
+    """
+    Temporarily remap image filepaths so the FBX exporter writes paths
+    pointing to the texture folder. Returns a dict of {image: original_filepath}
+    for restoration after export.
+    """
+    images = set()
+    for obj in objects:
+        if not hasattr(obj, "data") or not hasattr(obj.data, "materials"):
+            continue
+        for mat in obj.data.materials:
+            if mat is None:
+                continue
+            _collect_images_from_material(mat, images)
+
+    original_paths = {}
+    for img in images:
+        original_paths[img] = img.filepath_raw
+
+        if img.packed_file:
+            ext = _get_image_extension(img)
+            safe_name = bpy.path.clean_name(img.name)
+            img.filepath_raw = os.path.join(tex_dir, f"{safe_name}{ext}")
+        elif img.filepath:
+            filename = os.path.basename(bpy.path.abspath(img.filepath))
+            img.filepath_raw = os.path.join(tex_dir, filename)
+
+    return original_paths
+
+
+def restore_image_paths(original_paths):
+    """Restore image filepaths after export."""
+    for img, path in original_paths.items():
+        img.filepath_raw = path
+
+
 def collect_and_copy_textures(objects, destination_dir):
     """
     Collect all texture image files from materials on the given objects
