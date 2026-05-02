@@ -1,6 +1,8 @@
 import bpy
 
-from . import operators, preferences, presets
+from .src import operators, preferences
+
+from .src import presets
 
 
 def menu_func_export(self, context):
