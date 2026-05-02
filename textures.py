@@ -48,7 +48,11 @@ def restore_image_paths(original_paths):
 
 
 def collect_and_copy_textures(
-    objects, destination_dir, preserve_structure=False, processing_settings=None
+    objects,
+    destination_dir,
+    preserve_structure=False,
+    processing_settings=None,
+    report_fn=None,
 ):
     """
     Collect all texture image files from materials on the given objects
@@ -60,6 +64,8 @@ def collect_and_copy_textures(
         preserve_structure: If True, maintain relative folder hierarchy
         processing_settings: Dict with texture processing options (convert_format,
                            max_resolution, jpeg_quality). None for straight copy.
+        report_fn: Optional callable matching bpy.types.Operator.report signature,
+                   used to emit warnings (e.g. duplicate texture name conflicts).
 
     Returns the number of textures copied.
     """
@@ -71,6 +77,8 @@ def collect_and_copy_textures(
     os.makedirs(destination_dir, exist_ok=True)
 
     copied = 0
+    # Track destination -> source to detect name collisions across different source files
+    copied_destinations = {}
     for src_path, is_packed in image_data:
         if not os.path.isfile(src_path):
             continue
@@ -93,6 +101,21 @@ def collect_and_copy_textures(
                 continue
         except (OSError, ValueError):
             pass
+
+        # Warn when two different source files map to the same destination filename
+        if (
+            dst_path in copied_destinations
+            and copied_destinations[dst_path] != src_path
+        ):
+            if report_fn:
+                existing = os.path.basename(copied_destinations[dst_path])
+                incoming = os.path.basename(src_path)
+                report_fn(
+                    {"WARNING"},
+                    f"Duplicate texture name '{os.path.basename(dst_path)}': "
+                    f"'{existing}' will be overwritten by '{incoming}'",
+                )
+        copied_destinations[dst_path] = src_path
 
         # Apply texture processing or straight copy
         if processing_settings:

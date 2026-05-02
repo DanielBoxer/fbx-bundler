@@ -571,6 +571,12 @@ class EXPORT_SCENE_OT_fbx_bundle(bpy.types.Operator, ExportHelper):
 
     def _execute_single(self, context):
         filepath = self.filepath
+
+        # If the user clicked Export while inside a directory without typing a filename,
+        # default to Untitled.fbx in that directory
+        if not filepath or os.path.isdir(filepath) or not os.path.basename(filepath):
+            filepath = os.path.join(filepath.rstrip("\\/"), "Untitled.fbx")
+
         export_dir = os.path.dirname(filepath)
 
         objects = self._get_export_objects(context)
@@ -656,7 +662,11 @@ class EXPORT_SCENE_OT_fbx_bundle(bpy.types.Operator, ExportHelper):
                 }
 
             copied = textures.collect_and_copy_textures(
-                objects, tex_dir, self.preserve_texture_structure, processing
+                objects,
+                tex_dir,
+                self.preserve_texture_structure,
+                processing,
+                self.report,
             )
             if copied > 0:
                 self.report({"INFO"}, f"Copied {copied} texture(s) to: {tex_dir}")
@@ -759,7 +769,11 @@ class EXPORT_SCENE_OT_fbx_bundle(bpy.types.Operator, ExportHelper):
                 # Copy textures to the companion folder for this group
                 if self.export_textures:
                     textures.collect_and_copy_textures(
-                        objects, tex_dir, self.preserve_texture_structure, processing
+                        objects,
+                        tex_dir,
+                        self.preserve_texture_structure,
+                        processing,
+                        self.report,
                     )
 
         self.report({"INFO"}, f"Batch exported {exported} FBX file(s) to: {output_dir}")
@@ -835,5 +849,10 @@ class EXPORT_SCENE_OT_fbx_bundle(bpy.types.Operator, ExportHelper):
                 self.filepath = os.path.dirname(self.filepath)
         else:
             self.filename_ext = ".fbx"
+            # Pre-populate with a default filename if none is set
+            if not self.filepath or os.path.isdir(self.filepath):
+                blend_filepath = context.blend_data.filepath
+                base_dir = os.path.dirname(blend_filepath) if blend_filepath else ""
+                self.filepath = os.path.join(base_dir, "Untitled.fbx")
         context.window_manager.fileselect_add(self)
         return {"RUNNING_MODAL"}
