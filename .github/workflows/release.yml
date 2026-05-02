@@ -1,0 +1,52 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - blender_manifest.toml
+
+env:
+  ADDON_NAME: "FBX Bundler"
+  INCLUDED_FILES: "src LICENSE __init__.py blender_manifest.toml"
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Get Version from manifest
+        id: get_version_push
+        run: |
+          version=$(grep '^version' blender_manifest.toml | sed -E 's/version *= *"(.*)"/\1/')
+          echo "new_version=v${version}" >> $GITHUB_OUTPUT
+
+      - name: Check if version tag already exists
+        run: |
+          TAG="${{ steps.get_version_push.outputs.new_version }}"
+          if git ls-remote --tags origin "refs/tags/${TAG}" | grep -q .; then
+            echo "Tag ${TAG} already exists — version was not bumped. Skipping release."
+            exit 1
+          fi
+
+      # 1. package add-on
+      - name: Move to nested folder
+        run: |
+          mkdir "$ADDON_NAME"
+          mv $INCLUDED_FILES "$ADDON_NAME"
+
+      - name: Zip folder
+        run: zip -r "${ADDON_NAME}.zip" "$ADDON_NAME"
+
+      # 2. create new release
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.get_version_push.outputs.new_version }}
+        run: gh release create "$TAG" "${ADDON_NAME}.zip" --title "$TAG"
